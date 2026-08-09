@@ -274,7 +274,7 @@ body {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   font-size: 16px;
   color: var(--text);
 }
@@ -384,6 +384,44 @@ body {
   .drag-handle {
     font-size: 16px;
     padding: 1px 2px;
+  }
+}
+
+
+/* Tablet and larger - make everything a bit bigger */
+@media (min-width: 768px) {
+  .shopping-container {
+    max-width: 720px;
+    padding: 24px;
+    padding-bottom: 180px;
+  }
+  .title {
+    font-size: 32px;
+  }
+  .stats {
+    font-size: 15px;
+  }
+  .item {
+    padding: 16px 18px;
+    gap: 10px;
+  }
+  .item-text {
+    font-size: 17px;
+  }
+  .chip {
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+  .search-input {
+    padding: 14px 18px;
+    font-size: 17px;
+  }
+  .btn-secondary {
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+  .add-row {
+    gap: 10px;
   }
 }
 

@@ -12,8 +12,10 @@ const CATEGORIES = [
   'Produce',
   'Dairy',
   'Meat & Seafood',
-  'Pantry',
   'Frozen',
+  'Sauces',
+  'Drinks',
+  'Cereals',
   'Household',
   'Bakery',
   'Other'
@@ -22,32 +24,49 @@ const CATEGORIES = [
 type CategoryKey = typeof CATEGORIES[number]
 type Category = CategoryKey | 'All'
 
-const CATEGORY_LABELS: Record<Category, string> = {
+const CATEGORY_LABELS: Record<string, string> = {
   'All': 'Всички',
   'Produce': 'Плодове и зеленчуци',
   'Dairy': 'Млечни продукти',
   'Meat & Seafood': 'Месо и риба',
-  'Pantry': 'Килер',
   'Frozen': 'Замразени',
+  'Sauces': 'Сосове',
+  'Drinks': 'Напитки',
+  'Cereals': 'Зърнени',
   'Household': 'Домакински',
   'Bakery': 'Хлебни изделия',
   'Other': 'Друго',
+  'Pantry': 'Килер',
 }
 
-const CATEGORY_EMOJIS: Record<CategoryKey, string> = {
+const CATEGORY_EMOJIS: Record<string, string> = {
   'Produce': '🥬',
   'Dairy': '🥛',
   'Meat & Seafood': '🥩',
-  'Pantry': '🫙',
   'Frozen': '🧊',
+  'Sauces': '🥫',
+  'Drinks': '🥤',
+  'Cereals': '🌾',
   'Household': '🧼',
   'Bakery': '🍞',
   'Other': '📦',
+  'Pantry': '🫙',
 }
 
-function getCategoryDisplay(cat: CategoryKey): string {
-  return `${CATEGORY_EMOJIS[cat]} ${CATEGORY_LABELS[cat]}`
+function getCategoryDisplay(cat: string): string {
+  const emoji = CATEGORY_EMOJIS[cat] || "📦";
+  const label = CATEGORY_LABELS[cat] || cat;
+  return `${emoji} ${label}`
 }
+
+function encodeData(str: string): string {
+  try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); }
+}
+
+function decodeData(str: string): string {
+  try { return decodeURIComponent(escape(atob(str))); } catch { return atob(str); }
+}
+
 
 const STORAGE_KEY = 'shoplist-items'
 
@@ -112,7 +131,7 @@ function App() {
 
     if (data) {
       try {
-        const decoded = atob(data)
+        const decoded = decodeData(data)
         const parsed: ShoppingItem[] = JSON.parse(decoded)
         if (Array.isArray(parsed) && parsed.length > 0) {
           setItems(parsed)
@@ -231,23 +250,29 @@ function App() {
   // === SHARE LIST ===
   async function shareList() {
     if (items.length === 0) {
-      alert('Добавете продукти, за да споделите списъка.')
-      return
+      alert("Добавете продукти, за да споделите списъка.");
+      return;
     }
 
     try {
-      const json = JSON.stringify(items)
-      const encoded = btoa(json)
-      const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`
+      const json = JSON.stringify(items);
+      const encoded = encodeData(json);
+      const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
 
-      await navigator.clipboard.writeText(url)
-      setShareMessage('Линкът е копиран!')
-      setTimeout(() => setShareMessage(''), 2200)
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        setShareMessage("Линкът е копиран!");
+        setTimeout(() => setShareMessage(""), 2800);
+      } else {
+        throw new Error("clipboard not available");
+      }
     } catch (err) {
-      const json = JSON.stringify(items)
-      const encoded = btoa(json)
-      const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`
-      prompt('Копирайте този линк:', url)
+      const json = JSON.stringify(items);
+      const encoded = encodeData(json);
+      const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
+      prompt("Копирайте този линк:", url);
+      setShareMessage("Линкът е готов за копиране");
+      setTimeout(() => setShareMessage(""), 2200);
     }
   }
 
