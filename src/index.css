@@ -511,3 +511,45 @@ body {
     padding: 6px 8px;
   }
 }
+
+/* Quick pill-style search bar fix - matches chip pills, contained feel, aligned */
+.search-bar {
+  margin-bottom: 12px;
+}
+
+.search-input {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  padding: 10px 18px;
+  font-size: 15px;
+  color: var(--text);
+  box-sizing: border-box;
+  height: 40px;
+  line-height: 1.2;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+/* Keep tablet larger but pill */
+@media (min-width: 768px) {
+  .search-input {
+    padding: 12px 20px;
+    font-size: 16px;
+    height: 44px;
+  }
+}
+
+/* Small screen tighter pill */
+@media (max-width: 480px) {
+  .search-input {
+    padding: 9px 14px;
+    font-size: 15px;
+    height: 38px;
+  }
+}
