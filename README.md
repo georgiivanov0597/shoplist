@@ -1,32 +1,38 @@
-# React + TypeScript + Vite
+# Shoplist
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A simple, fast, mobile-first shopping list web app.
 
-Currently, two official plugins are available:
+- Add items with quantity and category
+- Tap to check off items
+- Adjust quantities with +/- buttons
+- Completed items move to a separate section
+- "Clear done" button
+- Everything saves automatically in your browser (offline capable)
+- Installable on your phone (PWA)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Tech
 
-## React Compiler
+- React 19 + TypeScript + Vite
+- Pure CSS (no heavy frameworks)
+- localStorage persistence
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Run locally
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Deploy
+
+Push to `main` → Vercel auto-deploys (same as the portfolio).
+
+## Future ideas
+
+- Shareable lists (link or QR)
+- Multi-device sync
+- Recipes → auto add ingredients
+- Voice input
+- Budget / price tracking
+
+Built as the next project after the static portfolio.

@@ -1,1 +1,0 @@
-// Tailwind removed - using custom CSS for simplicity

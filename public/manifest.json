@@ -1,0 +1,16 @@
+{
+  "name": "Shoplist",
+  "short_name": "Shoplist",
+  "description": "Simple shopping list that works offline",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
