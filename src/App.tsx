@@ -284,7 +284,7 @@ function App() {
           <div>
             <h1 className="title">Списък</h1>
             <p className="stats">
-              {totalRemaining} {totalRemaining === 1 ? 'продукт' : 'продукта'} за купуване
+              {totalRemaining} {totalRemaining === 1 ? 'продукт' : 'продукта'}&nbsp;за&nbsp;купуване
             </p>
           </div>
 
@@ -468,16 +468,25 @@ function App() {
             autoFocus
           />
 
-          <input
-            type="number"
-            value={newQty}
-            onChange={(e) => setNewQty(parseInt(e.target.value) || 1)}
-            min={1}
-            max={99}
-            className="qty-input"
-            style={{ width: '52px' }}
-            aria-label="Количество"
-          />
+          <div className="qty-stepper">
+            <button
+              type="button"
+              onClick={() => setNewQty(Math.max(1, newQty - 1))}
+              className="qty-btn"
+              aria-label="Намали количество"
+            >
+              −
+            </button>
+            <span className="qty-value" aria-label="Количество">{newQty}</span>
+            <button
+              type="button"
+              onClick={() => setNewQty(Math.min(99, newQty + 1))}
+              className="qty-btn"
+              aria-label="Увеличи количество"
+            >
+              +
+            </button>
+          </div>
 
           <select
             value={newCategory}
