@@ -31,12 +31,11 @@ body {
   min-height: 100dvh;
 }
 
-/* Main container with safe bottom padding for fixed add bar */
 .shopping-container {
   max-width: 640px;
   margin: 0 auto;
   padding: 16px;
-  padding-bottom: 160px; /* generous space for fixed bar + iOS home indicator */
+  padding-bottom: 160px;
 }
 
 .header {
@@ -72,10 +71,12 @@ body {
   gap: 12px;
   transition: all 0.1s ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  touch-action: none;
 }
 
-.item.checked {
-  opacity: 0.65;
+.item.dragging {
+  opacity: 0.6;
+  transform: scale(0.98);
 }
 
 .item-text {
@@ -90,6 +91,20 @@ body {
 .item.checked .item-text {
   text-decoration: line-through;
   color: var(--text-muted);
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 18px;
+  padding: 2px 4px;
+  user-select: none;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .qty {
@@ -131,7 +146,6 @@ body {
   background: #fef2f2;
 }
 
-/* === FIXED ADD BAR - Mobile friendly === */
 .add-form {
   position: fixed;
   bottom: 0;
@@ -206,7 +220,6 @@ body {
   cursor: pointer;
 }
 
-/* === Search + Filter === */
 .search-bar {
   margin-bottom: 12px;
 }
@@ -253,7 +266,6 @@ body {
   border-color: var(--accent);
 }
 
-/* === Sections === */
 .section-title {
   font-size: 13px;
   text-transform: uppercase;
@@ -291,7 +303,6 @@ body {
   color: white;
 }
 
-/* === Mobile specific fixes === */
 @media (max-width: 480px) {
   .add-row {
     gap: 6px;
@@ -314,7 +325,6 @@ body {
   }
 }
 
-/* Make sure nothing overflows horizontally on very small screens */
 .add-form, .shopping-container {
   overflow-x: hidden;
 }

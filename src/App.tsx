@@ -19,7 +19,20 @@ const CATEGORIES = [
   'Other'
 ] as const
 
-type Category = typeof CATEGORIES[number] | 'All'
+type CategoryKey = typeof CATEGORIES[number]
+type Category = CategoryKey | 'All'
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  'All': 'Всички',
+  'Produce': 'Плодове и зеленчуци',
+  'Dairy': 'Млечни продукти',
+  'Meat & Seafood': 'Месо и риба',
+  'Pantry': 'Килер',
+  'Frozen': 'Замразени',
+  'Household': 'Домакински',
+  'Bakery': 'Хлебни изделия',
+  'Other': 'Друго',
+}
 
 const STORAGE_KEY = 'shoplist-items'
 
@@ -35,7 +48,7 @@ function App() {
 
   const [newItem, setNewItem] = useState('')
   const [newQty, setNewQty] = useState(1)
-  const [newCategory, setNewCategory] = useState<Category>('Other')
+  const [newCategory, setNewCategory] = useState<CategoryKey>('Other')
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('')
@@ -43,6 +56,9 @@ function App() {
 
   // Share feedback
   const [shareMessage, setShareMessage] = useState('')
+
+  // Drag state
+  const [draggedId, setDraggedId] = useState<string | null>(null)
 
   // Persist to localStorage
   useEffect(() => {
@@ -59,9 +75,7 @@ function App() {
         const decoded = atob(data)
         const parsed: ShoppingItem[] = JSON.parse(decoded)
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Replace current list with shared one
           setItems(parsed)
-          // Clear the URL param so it doesn't re-load on refresh
           window.history.replaceState({}, '', window.location.pathname)
         }
       } catch (e) {
@@ -79,7 +93,7 @@ function App() {
 
   const activeItems = filteredItems.filter(i => !i.checked)
   const completedItems = filteredItems.filter(i => i.checked)
-  const remaining = items.filter(i => !i.checked).length   // always show real remaining count
+  const totalRemaining = items.filter(i => !i.checked).length
 
   function addItem(e?: React.FormEvent) {
     e?.preventDefault()
@@ -90,7 +104,7 @@ function App() {
       id: crypto.randomUUID(),
       text,
       quantity: Math.max(1, newQty),
-      category: newCategory === 'All' ? 'Other' : newCategory,
+      category: newCategory,
       checked: false,
     }
 
@@ -125,6 +139,45 @@ function App() {
     )
   }
 
+  // === DRAG TO REORDER ===
+  function handleDragStart(e: React.DragEvent<HTMLDivElement>, id: string) {
+    setDraggedId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>, dropId: string) {
+    e.preventDefault()
+    const dragId = e.dataTransfer.getData('text/plain')
+    setDraggedId(null)
+
+    if (!dragId || dragId === dropId) return
+
+    reorderItems(dragId, dropId)
+  }
+
+  function handleDragEnd() {
+    setDraggedId(null)
+  }
+
+  function reorderItems(dragId: string, dropId: string) {
+    setItems(prev => {
+      const dragIndex = prev.findIndex(i => i.id === dragId)
+      const dropIndex = prev.findIndex(i => i.id === dropId)
+      if (dragIndex === -1 || dropIndex === -1) return prev
+
+      const newItems = [...prev]
+      const [draggedItem] = newItems.splice(dragIndex, 1)
+      newItems.splice(dropIndex, 0, draggedItem)
+      return newItems
+    })
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') {
       addItem()
@@ -134,7 +187,7 @@ function App() {
   // === SHARE LIST ===
   async function shareList() {
     if (items.length === 0) {
-      alert('Add some items first to share the list.')
+      alert('Добавете продукти, за да споделите списъка.')
       return
     }
 
@@ -145,14 +198,13 @@ function App() {
 
       await navigator.clipboard.writeText(url)
 
-      setShareMessage('Link copied!')
+      setShareMessage('Линкът е копиран!')
       setTimeout(() => setShareMessage(''), 2200)
     } catch (err) {
-      // Fallback for older browsers / iOS issues
       const json = JSON.stringify(items)
       const encoded = btoa(json)
       const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`
-      prompt('Copy this link:', url)
+      prompt('Копирайте този линк:', url)
     }
   }
 
@@ -162,7 +214,7 @@ function App() {
         onClick={() => adjustQuantity(item.id, -1)}
         className="w-6 h-6 flex items-center justify-center text-lg leading-none border border-[var(--border)] rounded active:bg-[var(--bg)] disabled:opacity-40"
         disabled={item.quantity <= 1}
-        aria-label="Decrease quantity"
+        aria-label="Намали количество"
       >
         −
       </button>
@@ -170,7 +222,7 @@ function App() {
       <button
         onClick={() => adjustQuantity(item.id, 1)}
         className="w-6 h-6 flex items-center justify-center text-lg leading-none border border-[var(--border)] rounded active:bg-[var(--bg)]"
-        aria-label="Increase quantity"
+        aria-label="Увеличи количество"
       >
         +
       </button>
@@ -183,19 +235,19 @@ function App() {
         {/* Header */}
         <div className="header pt-2 pb-1">
           <div>
-            <h1 className="title">Shoplist</h1>
+            <h1 className="title">Списък</h1>
             <p className="stats">
-              {remaining} item{remaining !== 1 ? 's' : ''} to buy
+              {totalRemaining} {totalRemaining === 1 ? 'продукт' : 'продукта'} за купуване
             </p>
           </div>
 
           <div className="flex gap-2">
             <button onClick={shareList} className="btn-secondary">
-              Share
+              Сподели
             </button>
             {completedItems.length > 0 && (
               <button onClick={clearCompleted} className="btn-secondary">
-                Clear done
+                Изчисти готовите
               </button>
             )}
           </div>
@@ -212,7 +264,7 @@ function App() {
         <div className="search-bar">
           <input
             type="text"
-            placeholder="Search items..."
+            placeholder="Търси продукти..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="search-input"
@@ -225,7 +277,7 @@ function App() {
             className={`chip ${filterCategory === 'All' ? 'active' : ''}`}
             onClick={() => setFilterCategory('All')}
           >
-            All
+            {CATEGORY_LABELS['All']}
           </button>
           {CATEGORIES.map(cat => (
             <button
@@ -233,7 +285,7 @@ function App() {
               className={`chip ${filterCategory === cat ? 'active' : ''}`}
               onClick={() => setFilterCategory(cat)}
             >
-              {cat}
+              {CATEGORY_LABELS[cat]}
             </button>
           ))}
         </div>
@@ -242,7 +294,23 @@ function App() {
         {activeItems.length > 0 ? (
           <div className="mb-6">
             {activeItems.map(item => (
-              <div key={item.id} className="item">
+              <div
+                key={item.id}
+                className={`item ${draggedId === item.id ? 'dragging' : ''}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, item.id)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, item.id)}
+                onDragEnd={handleDragEnd}
+              >
+                <div
+                  className="drag-handle"
+                  title="Плъзни за пренареждане"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  ≡
+                </div>
+
                 <div
                   className="checkbox"
                   onClick={() => toggleItem(item.id)}
@@ -256,12 +324,12 @@ function App() {
 
                 <QtyControls item={item} />
 
-                <div className="category">{item.category}</div>
+                <div className="category">{CATEGORY_LABELS[item.category as CategoryKey]}</div>
 
                 <button
                   onClick={() => deleteItem(item.id)}
                   className="delete-btn"
-                  aria-label="Delete item"
+                  aria-label="Изтрий"
                 >
                   ✕
                 </button>
@@ -271,15 +339,17 @@ function App() {
         ) : (
           <div className="empty">
             {searchTerm || filterCategory !== 'All'
-              ? 'No items match your search/filter.'
-              : 'Your list is empty.<br />Add something below to get started.'}
+              ? 'Няма продукти, които отговарят на търсенето.'
+              : 'Списъкът е празен.<br />Добавете нещо отдолу.'}
           </div>
         )}
 
         {/* Completed */}
         {completedItems.length > 0 && (
           <div>
-            <div className="section-title">Completed ({completedItems.length})</div>
+            <div className="section-title">
+              Готови ({completedItems.length})
+            </div>
             {completedItems.map(item => (
               <div key={item.id} className="item checked">
                 <div
@@ -295,12 +365,12 @@ function App() {
 
                 <QtyControls item={item} />
 
-                <div className="category">{item.category}</div>
+                <div className="category">{CATEGORY_LABELS[item.category as CategoryKey]}</div>
 
                 <button
                   onClick={() => deleteItem(item.id)}
                   className="delete-btn"
-                  aria-label="Delete item"
+                  aria-label="Изтрий"
                 >
                   ✕
                 </button>
@@ -310,7 +380,7 @@ function App() {
         )}
       </div>
 
-      {/* Fixed Add Bar at bottom */}
+      {/* Fixed Add Bar */}
       <form onSubmit={addItem} className="add-form">
         <div className="add-row">
           <input
@@ -318,7 +388,7 @@ function App() {
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Add item (e.g. bananas)"
+            placeholder="Добави продукт (напр. банани)"
             className="input"
             autoFocus
           />
@@ -331,21 +401,23 @@ function App() {
             max={99}
             className="qty-input"
             style={{ width: '52px' }}
-            aria-label="Quantity"
+            aria-label="Количество"
           />
 
           <select
             value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value as Category)}
+            onChange={(e) => setNewCategory(e.target.value as CategoryKey)}
             className="select"
           >
             {CATEGORIES.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
+              <option key={cat} value={cat}>
+                {CATEGORY_LABELS[cat]}
+              </option>
             ))}
           </select>
 
           <button type="submit" className="btn">
-            Add
+            Добави
           </button>
         </div>
       </form>
