@@ -19,7 +19,7 @@ const CATEGORIES = [
   'Other'
 ] as const
 
-type Category = typeof CATEGORIES[number]
+type Category = typeof CATEGORIES[number] | 'All'
 
 const STORAGE_KEY = 'shoplist-items'
 
@@ -37,14 +37,49 @@ function App() {
   const [newQty, setNewQty] = useState(1)
   const [newCategory, setNewCategory] = useState<Category>('Other')
 
+  // Search & Filter
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterCategory, setFilterCategory] = useState<Category>('All')
+
+  // Share feedback
+  const [shareMessage, setShareMessage] = useState('')
+
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
   }, [items])
 
-  const activeItems = items.filter(i => !i.checked)
-  const completedItems = items.filter(i => i.checked)
-  const remaining = activeItems.length
+  // Load shared list from URL on first mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const data = params.get('data')
+
+    if (data) {
+      try {
+        const decoded = atob(data)
+        const parsed: ShoppingItem[] = JSON.parse(decoded)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Replace current list with shared one
+          setItems(parsed)
+          // Clear the URL param so it doesn't re-load on refresh
+          window.history.replaceState({}, '', window.location.pathname)
+        }
+      } catch (e) {
+        console.error('Failed to load shared list', e)
+      }
+    }
+  }, [])
+
+  // Filtering
+  const filteredItems = items.filter(item => {
+    const matchesSearch = item.text.toLowerCase().includes(searchTerm.toLowerCase().trim())
+    const matchesCategory = filterCategory === 'All' || item.category === filterCategory
+    return matchesSearch && matchesCategory
+  })
+
+  const activeItems = filteredItems.filter(i => !i.checked)
+  const completedItems = filteredItems.filter(i => i.checked)
+  const remaining = items.filter(i => !i.checked).length   // always show real remaining count
 
   function addItem(e?: React.FormEvent) {
     e?.preventDefault()
@@ -55,7 +90,7 @@ function App() {
       id: crypto.randomUUID(),
       text,
       quantity: Math.max(1, newQty),
-      category: newCategory,
+      category: newCategory === 'All' ? 'Other' : newCategory,
       checked: false,
     }
 
@@ -80,22 +115,44 @@ function App() {
     setItems(prev => prev.filter(item => !item.checked))
   }
 
-  function updateQuantity(id: string, qty: number) {
-    const newQty = Math.max(1, Math.min(99, qty))
-    setItems(prev =>
-      prev.map(item => (item.id === id ? { ...item, quantity: newQty } : item))
-    )
-  }
-
   function adjustQuantity(id: string, delta: number) {
-    const item = items.find(i => i.id === id)
-    if (!item) return
-    updateQuantity(id, item.quantity + delta)
+    setItems(prev =>
+      prev.map(item => {
+        if (item.id !== id) return item
+        const newQty = Math.max(1, Math.min(99, item.quantity + delta))
+        return { ...item, quantity: newQty }
+      })
+    )
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') {
       addItem()
+    }
+  }
+
+  // === SHARE LIST ===
+  async function shareList() {
+    if (items.length === 0) {
+      alert('Add some items first to share the list.')
+      return
+    }
+
+    try {
+      const json = JSON.stringify(items)
+      const encoded = btoa(json)
+      const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`
+
+      await navigator.clipboard.writeText(url)
+
+      setShareMessage('Link copied!')
+      setTimeout(() => setShareMessage(''), 2200)
+    } catch (err) {
+      // Fallback for older browsers / iOS issues
+      const json = JSON.stringify(items)
+      const encoded = btoa(json)
+      const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`
+      prompt('Copy this link:', url)
     }
   }
 
@@ -132,14 +189,53 @@ function App() {
             </p>
           </div>
 
-          {completedItems.length > 0 && (
-            <button
-              onClick={clearCompleted}
-              className="btn-secondary"
-            >
-              Clear done
+          <div className="flex gap-2">
+            <button onClick={shareList} className="btn-secondary">
+              Share
             </button>
-          )}
+            {completedItems.length > 0 && (
+              <button onClick={clearCompleted} className="btn-secondary">
+                Clear done
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Share toast */}
+        {shareMessage && (
+          <div className="text-center text-sm mb-3 text-[var(--accent)]">
+            {shareMessage}
+          </div>
+        )}
+
+        {/* Search */}
+        <div className="search-bar">
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="search-input"
+          />
+        </div>
+
+        {/* Category filters */}
+        <div className="filter-chips">
+          <button
+            className={`chip ${filterCategory === 'All' ? 'active' : ''}`}
+            onClick={() => setFilterCategory('All')}
+          >
+            All
+          </button>
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              className={`chip ${filterCategory === cat ? 'active' : ''}`}
+              onClick={() => setFilterCategory(cat)}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
 
         {/* Active List */}
@@ -174,7 +270,9 @@ function App() {
           </div>
         ) : (
           <div className="empty">
-            Your list is empty.<br />Add something below to get started.
+            {searchTerm || filterCategory !== 'All'
+              ? 'No items match your search/filter.'
+              : 'Your list is empty.<br />Add something below to get started.'}
           </div>
         )}
 
@@ -212,7 +310,7 @@ function App() {
         )}
       </div>
 
-      {/* Floating Add Bar */}
+      {/* Fixed Add Bar at bottom */}
       <form onSubmit={addItem} className="add-form">
         <div className="add-row">
           <input
@@ -231,7 +329,8 @@ function App() {
             onChange={(e) => setNewQty(parseInt(e.target.value) || 1)}
             min={1}
             max={99}
-            className="qty-input w-16"
+            className="qty-input"
+            style={{ width: '52px' }}
             aria-label="Quantity"
           />
 
