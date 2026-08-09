@@ -12,8 +12,15 @@
 }
 
 .theme-pink {
-  --accent: #db2777;
+  /* full pink-ish color scheme - everything */
+  --accent: #e11d8a;
   --accent-light: #f472b6;
+  --bg: #fff0f6;
+  --card: #ffffff;
+  --text: #3f1f2e;
+  --text-muted: #9c6b85;
+  --border: #f8d0e4;
+  --danger: #f43f5e;
   --category-bg: #fce7f3;
   --category-text: #9d174d;
 }
@@ -29,7 +36,15 @@
     --category-text: #bae6fd;
   }
   .theme-pink {
-    --category-bg: #4c1d95;
+    --accent: #f472b6;
+    --accent-light: #f9a8d4;
+    --bg: #2c1f26;
+    --card: #3c2a33;
+    --text: #f4e8f0;
+    --text-muted: #c9a9b9;
+    --border: #5c3f4e;
+    --danger: #fb7185;
+    --category-bg: #5b2a4a;
     --category-text: #f9a8d4;
   }
 }
@@ -242,6 +257,12 @@ body {
   border-radius: 8px;
   font-size: 14px;
   cursor: pointer;
+}
+
+.theme-pink .theme-toggle {
+  background: #fce7f3;
+  border-color: #f9a8d4;
+  color: #9d174d;
 }
 
 .search-bar {

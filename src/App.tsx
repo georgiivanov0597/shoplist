@@ -264,7 +264,7 @@ function App() {
           </div>
 
           <div className="flex gap-2">
-            <button onClick={toggleTheme} className="btn-secondary" title="Смени тема">
+            <button onClick={toggleTheme} className="btn-secondary theme-toggle" title="Смени тема" style={{marginRight: "12px"}}>
               {theme === 'teal' ? '🩷' : '🌿'}
             </button>
             <button onClick={shareList} className="btn-secondary">
@@ -378,7 +378,7 @@ function App() {
           <div className="empty">
             {searchTerm || filterCategory !== 'All'
               ? 'Няма продукти, които отговарят на търсенето.'
-              : 'Списъкът е празен.<br />Добавете нещо отдолу.'}
+              : <>Списъкът е празен.<br />Добавете нещо отдолу.</>}
           </div>
         )}
 
