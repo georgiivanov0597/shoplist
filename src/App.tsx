@@ -34,6 +34,21 @@ const CATEGORY_LABELS: Record<Category, string> = {
   'Other': 'Друго',
 }
 
+const CATEGORY_EMOJIS: Record<CategoryKey, string> = {
+  'Produce': '🥬',
+  'Dairy': '🥛',
+  'Meat & Seafood': '🥩',
+  'Pantry': '🫙',
+  'Frozen': '🧊',
+  'Household': '🧼',
+  'Bakery': '🍞',
+  'Other': '📦',
+}
+
+function getCategoryDisplay(cat: CategoryKey): string {
+  return `${CATEGORY_EMOJIS[cat]} ${CATEGORY_LABELS[cat]}`
+}
+
 const STORAGE_KEY = 'shoplist-items'
 
 function App() {
@@ -60,10 +75,35 @@ function App() {
   // Drag state
   const [draggedId, setDraggedId] = useState<string | null>(null)
 
+  // Theme: teal (default) or pink
+  const [theme, setTheme] = useState<'teal' | 'pink'>(() => {
+    try {
+      return (localStorage.getItem('shoplist-theme') as 'teal' | 'pink') || 'teal'
+    } catch {
+      return 'teal'
+    }
+  })
+
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
   }, [items])
+
+  // Persist and apply theme
+  useEffect(() => {
+    try {
+      localStorage.setItem('shoplist-theme', theme)
+    } catch {}
+    const root = document.documentElement
+    root.classList.remove('theme-teal', 'theme-pink')
+    root.classList.add(`theme-${theme}`)
+
+    // Update meta theme-color for PWA/browser
+    const meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
+    if (meta) {
+      meta.setAttribute('content', theme === 'teal' ? '#0f766e' : '#db2777')
+    }
+  }, [theme])
 
   // Load shared list from URL on first mount
   useEffect(() => {
@@ -129,12 +169,16 @@ function App() {
     setItems(prev => prev.filter(item => !item.checked))
   }
 
-  function adjustQuantity(id: string, delta: number) {
+  function toggleTheme() {
+    setTheme(t => (t === 'teal' ? 'pink' : 'teal'))
+  }
+
+  function updateQuantity(id: string, newQty: number) {
     setItems(prev =>
       prev.map(item => {
         if (item.id !== id) return item
-        const newQty = Math.max(1, Math.min(99, item.quantity + delta))
-        return { ...item, quantity: newQty }
+        const qty = Math.max(1, Math.min(99, newQty || 1))
+        return { ...item, quantity: qty }
       })
     )
   }
@@ -197,7 +241,6 @@ function App() {
       const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`
 
       await navigator.clipboard.writeText(url)
-
       setShareMessage('Линкът е копиран!')
       setTimeout(() => setShareMessage(''), 2200)
     } catch (err) {
@@ -207,27 +250,6 @@ function App() {
       prompt('Копирайте този линк:', url)
     }
   }
-
-  const QtyControls = ({ item }: { item: ShoppingItem }) => (
-    <div className="flex items-center gap-1">
-      <button
-        onClick={() => adjustQuantity(item.id, -1)}
-        className="w-6 h-6 flex items-center justify-center text-lg leading-none border border-[var(--border)] rounded active:bg-[var(--bg)] disabled:opacity-40"
-        disabled={item.quantity <= 1}
-        aria-label="Намали количество"
-      >
-        −
-      </button>
-      <div className="qty min-w-[34px]">{item.quantity}</div>
-      <button
-        onClick={() => adjustQuantity(item.id, 1)}
-        className="w-6 h-6 flex items-center justify-center text-lg leading-none border border-[var(--border)] rounded active:bg-[var(--bg)]"
-        aria-label="Увеличи количество"
-      >
-        +
-      </button>
-    </div>
-  )
 
   return (
     <div className="min-h-dvh bg-[var(--bg)] text-[var(--text)]">
@@ -242,6 +264,9 @@ function App() {
           </div>
 
           <div className="flex gap-2">
+            <button onClick={toggleTheme} className="btn-secondary" title="Смени тема">
+              {theme === 'teal' ? '🩷' : '🌿'}
+            </button>
             <button onClick={shareList} className="btn-secondary">
               Сподели
             </button>
@@ -285,7 +310,7 @@ function App() {
               className={`chip ${filterCategory === cat ? 'active' : ''}`}
               onClick={() => setFilterCategory(cat)}
             >
-              {CATEGORY_LABELS[cat]}
+              {getCategoryDisplay(cat)}
             </button>
           ))}
         </div>
@@ -322,9 +347,22 @@ function App() {
 
                 <div className="item-text">{item.text}</div>
 
-                <QtyControls item={item} />
+                <input
+                  type="number"
+                  value={item.quantity}
+                  onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
+                  min={1}
+                  max={99}
+                  className="qty-input"
+                  aria-label="Количество"
+                />
 
-                <div className="category">{CATEGORY_LABELS[item.category as CategoryKey]}</div>
+                <div
+                  className="category"
+                  title={CATEGORY_LABELS[item.category as CategoryKey]}
+                >
+                  {CATEGORY_EMOJIS[item.category as CategoryKey]}
+                </div>
 
                 <button
                   onClick={() => deleteItem(item.id)}
@@ -360,12 +398,24 @@ function App() {
                 >
                   ✓
                 </div>
-
                 <div className="item-text">{item.text}</div>
 
-                <QtyControls item={item} />
+                <input
+                  type="number"
+                  value={item.quantity}
+                  onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
+                  min={1}
+                  max={99}
+                  className="qty-input"
+                  aria-label="Количество"
+                />
 
-                <div className="category">{CATEGORY_LABELS[item.category as CategoryKey]}</div>
+                <div
+                  className="category"
+                  title={CATEGORY_LABELS[item.category as CategoryKey]}
+                >
+                  {CATEGORY_EMOJIS[item.category as CategoryKey]}
+                </div>
 
                 <button
                   onClick={() => deleteItem(item.id)}
@@ -411,7 +461,7 @@ function App() {
           >
             {CATEGORIES.map(cat => (
               <option key={cat} value={cat}>
-                {CATEGORY_LABELS[cat]}
+                {getCategoryDisplay(cat)}
               </option>
             ))}
           </select>
