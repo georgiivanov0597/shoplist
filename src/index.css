@@ -101,7 +101,11 @@ body {
   gap: 8px;
   transition: all 0.1s ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-  touch-action: none;
+  /* Allow vertical page scroll when finger is on the card.
+     Drag initiation is limited to .drag-handle (touch-action: none there). */
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .item.dragging {
@@ -117,6 +121,8 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Text itself can still be selected if needed later; keep pan for scroll */
+  touch-action: pan-y;
 }
 
 .item.checked .item-text {
@@ -128,14 +134,19 @@ body {
   cursor: grab;
   color: var(--text-muted);
   font-size: 18px;
-  padding: 2px 4px;
+  padding: 6px 8px;
+  margin: -4px -2px -4px -4px;
   user-select: none;
   flex-shrink: 0;
   opacity: 0.6;
+  /* Only the handle blocks browser gestures so drag can start */
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .drag-handle:active {
   cursor: grabbing;
+  opacity: 1;
 }
 
 .qty-input {

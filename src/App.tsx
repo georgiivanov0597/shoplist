@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface ShoppingItem {
   id: string
@@ -60,25 +60,153 @@ function getCategoryDisplay(cat: string): string {
 }
 
 function encodeData(str: string): string {
-  try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); }
+  try {
+    return btoa(unescape(encodeURIComponent(str)))
+  } catch {
+    return btoa(str)
+  }
 }
 
 function decodeData(str: string): string {
-  try { return decodeURIComponent(escape(atob(str))); } catch { return atob(str); }
+  // URLs often turn '+' into spaces; restore before atob
+  const normalized = str.replace(/ /g, '+')
+  try {
+    return decodeURIComponent(escape(atob(normalized)))
+  } catch {
+    return atob(normalized)
+  }
 }
 
+/** Compact payload keeps share URLs shorter and more reliable on mobile messengers. */
+type CompactItem = [string, number, string, 0 | 1]
+
+function toCompact(items: ShoppingItem[]): CompactItem[] {
+  return items.map((i) => [i.text, i.quantity, i.category, i.checked ? 1 : 0])
+}
+
+function fromCompact(raw: unknown): ShoppingItem[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null
+
+  // New compact format: [text, qty, category, checked]
+  if (Array.isArray(raw[0])) {
+    const items: ShoppingItem[] = []
+    for (const row of raw as CompactItem[]) {
+      if (!Array.isArray(row) || typeof row[0] !== 'string') return null
+      const text = String(row[0] ?? '').trim()
+      if (!text) continue
+      items.push({
+        id: crypto.randomUUID(),
+        text,
+        quantity: Math.max(1, Math.min(99, Number(row[1]) || 1)),
+        category: String(row[2] || 'Other'),
+        checked: Boolean(row[3]),
+      })
+    }
+    return items.length ? items : null
+  }
+
+  // Legacy full objects
+  const items = (raw as ShoppingItem[])
+    .filter((i) => i && typeof i.text === 'string' && i.text.trim())
+    .map((i) => ({
+      id: typeof i.id === 'string' && i.id ? i.id : crypto.randomUUID(),
+      text: i.text.trim(),
+      quantity: Math.max(1, Math.min(99, Number(i.quantity) || 1)),
+      category: typeof i.category === 'string' && i.category ? i.category : 'Other',
+      checked: Boolean(i.checked),
+    }))
+  return items.length ? items : null
+}
+
+function readSharePayloadFromLocation(): string | null {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const fromQuery = params.get('data') || params.get('d')
+    if (fromQuery) return fromQuery
+
+    const hash = window.location.hash.startsWith('#')
+      ? window.location.hash.slice(1)
+      : window.location.hash
+    if (!hash) return null
+
+    // Support #data=... and #d=...
+    if (hash.startsWith('data=') || hash.startsWith('d=')) {
+      return new URLSearchParams(hash).get('data') || new URLSearchParams(hash).get('d')
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function parseSharePayload(data: string): ShoppingItem[] | null {
+  try {
+    // decodeURIComponent once if messenger/browser encoded it; tolerate plain base64 too
+    let payload = data
+    try {
+      payload = decodeURIComponent(data)
+    } catch {
+      payload = data
+    }
+    const decoded = decodeData(payload)
+    return fromCompact(JSON.parse(decoded))
+  } catch (e) {
+    console.error('Failed to load shared list', e)
+    return null
+  }
+}
+
+function clearShareFromUrl() {
+  try {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('data')
+    url.searchParams.delete('d')
+    // Drop share hash payloads; keep unrelated hashes empty
+    if (
+      url.hash.startsWith('#data=') ||
+      url.hash.startsWith('#d=') ||
+      url.hash.includes('data=') ||
+      url.hash.includes('d=')
+    ) {
+      url.hash = ''
+    }
+    window.history.replaceState({}, '', url.pathname + url.search + url.hash)
+  } catch {
+    window.history.replaceState({}, '', window.location.pathname)
+  }
+}
 
 const STORAGE_KEY = 'shoplist-items'
 
-function App() {
-  const [items, setItems] = useState<ShoppingItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      return saved ? JSON.parse(saved) : []
-    } catch {
-      return []
+function loadInitialItems(): ShoppingItem[] {
+  // 1) Shared link wins — read + persist SYNCHRONOUSLY so React StrictMode
+  // remount still sees the list after the URL is cleaned.
+  const sharedRaw = readSharePayloadFromLocation()
+  if (sharedRaw) {
+    const shared = parseSharePayload(sharedRaw)
+    if (shared) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(shared))
+      } catch {
+        /* ignore quota */
+      }
+      // Clean URL after paint so reload doesn't re-import forever, but LS already has data
+      queueMicrotask(() => clearShareFromUrl())
+      return shared
     }
-  })
+  }
+
+  // 2) Fallback: local device list
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    return saved ? JSON.parse(saved) : []
+  } catch {
+    return []
+  }
+}
+
+function App() {
+  const [items, setItems] = useState<ShoppingItem[]>(loadInitialItems)
 
   const [newItem, setNewItem] = useState('')
   const [newQty, setNewQty] = useState(1)
@@ -91,8 +219,11 @@ function App() {
   // Share feedback
   const [shareMessage, setShareMessage] = useState('')
 
-  // Drag state
+  // Drag state — whole-row draggable only while handle is pressed (keeps scroll working)
   const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragEnabledId, setDragEnabledId] = useState<string | null>(null)
+  const dragEnabledIdRef = useRef<string | null>(null)
+  const draggedIdRef = useRef<string | null>(null)
 
   // Theme: teal (default) or pink
   const [theme, setTheme] = useState<'teal' | 'pink'>(() => {
@@ -105,7 +236,11 @@ function App() {
 
   // Persist to localStorage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+    } catch {
+      /* ignore */
+    }
   }, [items])
 
   // Persist and apply theme
@@ -123,25 +258,6 @@ function App() {
       meta.setAttribute('content', theme === 'teal' ? '#0f766e' : '#db2777')
     }
   }, [theme])
-
-  // Load shared list from URL on first mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const data = params.get('data')
-
-    if (data) {
-      try {
-        const decoded = decodeData(data)
-        const parsed: ShoppingItem[] = JSON.parse(decoded)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setItems(parsed)
-          window.history.replaceState({}, '', window.location.pathname)
-        }
-      } catch (e) {
-        console.error('Failed to load shared list', e)
-      }
-    }
-  }, [])
 
   // Filtering
   const filteredItems = items.filter(item => {
@@ -204,6 +320,12 @@ function App() {
 
   // === DRAG TO REORDER ===
   function handleDragStart(e: React.DragEvent<HTMLDivElement>, id: string) {
+    // Only allow drag when initiated from the handle (ref is sync; state may lag one frame)
+    if (dragEnabledIdRef.current !== id) {
+      e.preventDefault()
+      return
+    }
+    draggedIdRef.current = id
     setDraggedId(id)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', id)
@@ -216,8 +338,11 @@ function App() {
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>, dropId: string) {
     e.preventDefault()
-    const dragId = e.dataTransfer.getData('text/plain')
+    const dragId = e.dataTransfer.getData('text/plain') || draggedIdRef.current
+    draggedIdRef.current = null
+    dragEnabledIdRef.current = null
     setDraggedId(null)
+    setDragEnabledId(null)
 
     if (!dragId || dragId === dropId) return
 
@@ -225,7 +350,28 @@ function App() {
   }
 
   function handleDragEnd() {
+    draggedIdRef.current = null
+    dragEnabledIdRef.current = null
     setDraggedId(null)
+    setDragEnabledId(null)
+  }
+
+  function enableDragFor(id: string, rowEl: HTMLElement | null) {
+    dragEnabledIdRef.current = id
+    setDragEnabledId(id)
+    // Sync DOM so HTML5 DnD can start on this same gesture
+    if (rowEl) rowEl.setAttribute('draggable', 'true')
+  }
+
+  function disableDragSoon(rowEl: HTMLElement | null) {
+    // If a drag didn't start, clear enable on next tick
+    window.setTimeout(() => {
+      if (!draggedIdRef.current) {
+        dragEnabledIdRef.current = null
+        setDragEnabledId(null)
+        if (rowEl) rowEl.setAttribute('draggable', 'false')
+      }
+    }, 0)
   }
 
   function reorderItems(dragId: string, dropId: string) {
@@ -248,31 +394,50 @@ function App() {
   }
 
   // === SHARE LIST ===
+  function buildShareUrl(list: ShoppingItem[]): string {
+    const json = JSON.stringify(toCompact(list))
+    const encoded = encodeURIComponent(encodeData(json))
+    // Prefer hash payload: never sent to the server, survives SPA hosts better,
+    // and avoids some messengers/proxies mangling long query strings.
+    return `${window.location.origin}${window.location.pathname}#d=${encoded}`
+  }
+
   async function shareList() {
     if (items.length === 0) {
-      alert("Добавете продукти, за да споделите списъка.");
-      return;
+      alert('Добавете продукти, за да споделите списъка.')
+      return
+    }
+
+    const url = buildShareUrl(items)
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Списък за пазаруване',
+          text: 'Отвори споделения списък',
+          url,
+        })
+        setShareMessage('Споделено!')
+        setTimeout(() => setShareMessage(''), 2200)
+        return
+      }
+    } catch (err) {
+      // User cancelled share sheet — don't fall through as error noise
+      if (err instanceof DOMException && err.name === 'AbortError') return
     }
 
     try {
-      const json = JSON.stringify(items);
-      const encoded = encodeData(json);
-      const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
-
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(url);
-        setShareMessage("Линкът е копиран!");
-        setTimeout(() => setShareMessage(""), 2800);
-      } else {
-        throw new Error("clipboard not available");
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url)
+        setShareMessage('Линкът е копиран!')
+        setTimeout(() => setShareMessage(''), 2800)
+        return
       }
-    } catch (err) {
-      const json = JSON.stringify(items);
-      const encoded = encodeData(json);
-      const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
-      prompt("Копирайте този линк:", url);
-      setShareMessage("Линкът е готов за копиране");
-      setTimeout(() => setShareMessage(""), 2200);
+      throw new Error('clipboard not available')
+    } catch {
+      prompt('Копирайте този линк:', url)
+      setShareMessage('Линкът е готов за копиране')
+      setTimeout(() => setShareMessage(''), 2200)
     }
   }
 
@@ -347,7 +512,7 @@ function App() {
               <div
                 key={item.id}
                 className={`item ${draggedId === item.id ? 'dragging' : ''}`}
-                draggable
+                draggable={dragEnabledId === item.id}
                 onDragStart={(e) => handleDragStart(e, item.id)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, item.id)}
@@ -356,7 +521,22 @@ function App() {
                 <div
                   className="drag-handle"
                   title="Плъзни за пренареждане"
-                  onMouseDown={(e) => e.stopPropagation()}
+                  role="button"
+                  aria-label="Плъзни за пренареждане"
+                  onPointerDown={(e) => {
+                    const row = (e.currentTarget as HTMLElement).closest('.item') as HTMLElement | null
+                    enableDragFor(item.id, row)
+                  }}
+                  onPointerUp={(e) => {
+                    const row = (e.currentTarget as HTMLElement).closest('.item') as HTMLElement | null
+                    disableDragSoon(row)
+                  }}
+                  onPointerCancel={(e) => {
+                    const row = (e.currentTarget as HTMLElement).closest('.item') as HTMLElement | null
+                    dragEnabledIdRef.current = null
+                    setDragEnabledId(null)
+                    if (row) row.setAttribute('draggable', 'false')
+                  }}
                 >
                   ≡
                 </div>
