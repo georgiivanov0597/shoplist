@@ -9,6 +9,7 @@ A simple, fast, mobile-first shopping list web app.
 - "Clear done" button
 - Everything saves automatically in your browser (offline capable)
 - Installable on your phone (PWA)
+- Share lists via very short links (data compressed in the URL hash)
 
 ## Tech
 

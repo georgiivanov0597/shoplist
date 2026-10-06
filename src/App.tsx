@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import lz from 'lz-string'
 
 interface ShoppingItem {
   id: string
@@ -59,14 +60,6 @@ function getCategoryDisplay(cat: string): string {
   return `${emoji} ${label}`
 }
 
-function encodeData(str: string): string {
-  try {
-    return btoa(unescape(encodeURIComponent(str)))
-  } catch {
-    return btoa(str)
-  }
-}
-
 function decodeData(str: string): string {
   // URLs often turn '+' into spaces; restore before atob
   const normalized = str.replace(/ /g, '+')
@@ -77,28 +70,41 @@ function decodeData(str: string): string {
   }
 }
 
-/** Compact payload keeps share URLs shorter and more reliable on mobile messengers. */
-type CompactItem = [string, number, string, 0 | 1]
+/** Compact payload keeps share URLs shorter and more reliable on mobile messengers.
+ * Uses lz-string + category indices for much shorter share links.
+ */
+const CAT_INDEX: Record<string, number> = {}
+CATEGORIES.forEach((c, i) => { CAT_INDEX[c] = i })
+
+type CompactItem = [string, number, number | string, 0 | 1]
 
 function toCompact(items: ShoppingItem[]): CompactItem[] {
-  return items.map((i) => [i.text, i.quantity, i.category, i.checked ? 1 : 0])
+  return items.map((i) => [i.text, i.quantity, CAT_INDEX[i.category] ?? 9, i.checked ? 1 : 0])
 }
 
 function fromCompact(raw: unknown): ShoppingItem[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null
 
-  // New compact format: [text, qty, category, checked]
+  // New compact format: [text, qty, categoryIndex or string, checked]
   if (Array.isArray(raw[0])) {
     const items: ShoppingItem[] = []
     for (const row of raw as CompactItem[]) {
       if (!Array.isArray(row) || typeof row[0] !== 'string') return null
       const text = String(row[0] ?? '').trim()
       if (!text) continue
+      let cat = row[2]
+      let category: string
+      if (typeof cat === 'number' || /^\d+$/.test(String(cat))) {
+        const idx = typeof cat === 'number' ? cat : parseInt(String(cat), 10)
+        category = CATEGORIES[idx] || 'Other'
+      } else {
+        category = String(cat || 'Other')
+      }
       items.push({
         id: crypto.randomUUID(),
         text,
         quantity: Math.max(1, Math.min(99, Number(row[1]) || 1)),
-        category: String(row[2] || 'Other'),
+        category,
         checked: Boolean(row[3]),
       })
     }
@@ -141,7 +147,19 @@ function readSharePayloadFromLocation(): string | null {
 
 function parseSharePayload(data: string): ShoppingItem[] | null {
   try {
-    // decodeURIComponent once if messenger/browser encoded it; tolerate plain base64 too
+    // Try new lz-string compressed format first (much shorter URLs)
+    try {
+      const decompressed = lz.decompressFromEncodedURIComponent(data)
+      if (decompressed) {
+        const parsed = JSON.parse(decompressed)
+        const items = fromCompact(parsed)
+        if (items) return items
+      }
+    } catch {
+      // fall through to legacy
+    }
+
+    // Legacy: base64 + encodeURIComponent payload
     let payload = data
     try {
       payload = decodeURIComponent(data)
@@ -395,11 +413,14 @@ function App() {
 
   // === SHARE LIST ===
   function buildShareUrl(list: ShoppingItem[]): string {
-    const json = JSON.stringify(toCompact(list))
-    const encoded = encodeURIComponent(encodeData(json))
+    const compact = toCompact(list)
+    const json = JSON.stringify(compact)
+    // lz-string compressToEncodedURIComponent produces a short, URL-safe string
+    // (no % encodings, much smaller than base64 + JSON)
+    const compressed = lz.compressToEncodedURIComponent(json)
     // Prefer hash payload: never sent to the server, survives SPA hosts better,
     // and avoids some messengers/proxies mangling long query strings.
-    return `${window.location.origin}${window.location.pathname}#d=${encoded}`
+    return `${window.location.origin}${window.location.pathname}#d=${compressed}`
   }
 
   async function shareList() {
